@@ -18,6 +18,7 @@ interface RecommendationPanelProps {
   onCommit?: () => void;
   noBorder?: boolean;
   noGlass?: boolean;
+  description?: string;
 }
 
 export function RecommendationPanel({
@@ -25,6 +26,7 @@ export function RecommendationPanel({
   onCommit,
   noBorder = false,
   noGlass = false,
+  description = "Final action guidance generated from the latest simulation reliability and stress values.",
 }: RecommendationPanelProps) {
   const getIcon = () => {
     switch (recommendation.type) {
@@ -76,6 +78,9 @@ export function RecommendationPanel({
 
       <p className="text-xs font-medium text-zinc-500 leading-snug px-1">
         {recommendation.reason}
+      </p>
+      <p className="text-[10px] text-zinc-500 italic normal-case leading-relaxed px-1">
+        {description}
       </p>
 
       <button

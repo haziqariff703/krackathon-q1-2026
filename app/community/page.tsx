@@ -42,6 +42,9 @@ export default function CommunityPage() {
     }
     return new Set();
   });
+  const [selectedEvidenceUrl, setSelectedEvidenceUrl] = useState<string | null>(
+    null,
+  );
 
   const handleUpvote = async (id: string) => {
     if (votedIds.has(id)) return;
@@ -135,6 +138,24 @@ export default function CommunityPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [pageSize, activeFilter]);
+
+  // Handle ESC key for modal
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedEvidenceUrl(null);
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  }, []);
+
+  // Lock scroll when modal open
+  useEffect(() => {
+    if (selectedEvidenceUrl) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+  }, [selectedEvidenceUrl]);
 
   return (
     <DashboardShell>
@@ -234,15 +255,15 @@ export default function CommunityPage() {
                           Verify Insight
                         </button>
                         {trending.image_url && (
-                          <a
-                            href={trending.image_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() =>
+                              setSelectedEvidenceUrl(trending.image_url!)
+                            }
                             className="bg-white border-2 border-zinc-100 text-zinc-950 px-6 py-3 sm:px-8 sm:py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-zinc-50 transition-all uppercase tracking-widest text-[10px]"
                           >
                             <Camera size={16} />
                             View Evidence
-                          </a>
+                          </button>
                         )}
                         <button
                           onClick={() => handleUpvote(trending.id)}
@@ -342,15 +363,15 @@ export default function CommunityPage() {
                           </div>
                           <div className="space-y-4">
                             {item.image_url && (
-                              <a
-                                href={item.image_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                onClick={() =>
+                                  setSelectedEvidenceUrl(item.image_url!)
+                                }
                                 className="block w-full rounded-xl border border-zinc-100 bg-zinc-50/50 p-2 text-center text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-zinc-600 transition-colors"
                               >
                                 <Camera size={12} className="inline mr-1" />{" "}
                                 View Evidence
-                              </a>
+                              </button>
                             )}
                             <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
                               <div className="flex items-center gap-2">
@@ -508,6 +529,60 @@ export default function CommunityPage() {
           )}
         </div>
       </div>
+
+      {/* Evidence Modal */}
+      {selectedEvidenceUrl && (
+        <div
+          className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-300"
+          onClick={() => setSelectedEvidenceUrl(null)}
+          street-view="disabled"
+        >
+          <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-md" />
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] bg-white rounded-[2rem] sm:rounded-[3rem] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <Camera size={18} className="text-zinc-400" />
+                <span className="font-black uppercase tracking-widest text-[10px] text-zinc-400">
+                  Incident Evidence
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedEvidenceUrl(null)}
+                className="p-2 hover:bg-zinc-100 rounded-full transition-colors text-zinc-500 hover:text-zinc-950"
+                street-view="disabled"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-auto bg-zinc-50 flex items-center justify-center p-4">
+              <img
+                src={selectedEvidenceUrl}
+                alt="Incident Evidence"
+                className="max-w-full max-h-full object-contain rounded-xl shadow-lg border-4 border-white"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-white border-t border-zinc-100 flex items-center justify-between">
+              <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest">
+                Authenticated Evidence • ARUS Mesh
+              </p>
+              <button
+                onClick={() => setSelectedEvidenceUrl(null)}
+                className="bg-zinc-950 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-transform"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardShell>
   );
 }

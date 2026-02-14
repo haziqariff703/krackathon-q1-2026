@@ -17,6 +17,7 @@ type TransitRoutePanelProps = {
   placeOptions: string[];
   originHint?: string | null;
   destinationHint?: string | null;
+  description?: string;
   compact?: boolean;
 };
 
@@ -33,6 +34,7 @@ export function TransitRoutePanel({
   placeOptions,
   originHint = null,
   destinationHint = null,
+  description = "Choose origin and destination, then simulate to generate a route summary from active stop data.",
   compact = false,
 }: TransitRoutePanelProps) {
   const listId = React.useId().replace(/:/g, "");
@@ -47,8 +49,8 @@ export function TransitRoutePanel({
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-black text-zinc-950">Transit Route</div>
-          <p className="text-xs text-zinc-500">
-            Simulated using local KL demo data.
+          <p className="text-xs text-zinc-500 italic normal-case leading-relaxed">
+            {description}
           </p>
         </div>
         {isRouting && (

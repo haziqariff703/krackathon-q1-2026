@@ -279,3 +279,137 @@ export const buildMetricsFromSimulation = (payload: {
     simulationDepth: payload.simulation_depth,
   };
 };
+
+type CommunityPathInfluence = {
+  isVerified?: boolean | null;
+  upvotes?: number | null;
+  shelterLevel?: string | null;
+  averageWalkTimeMinutes?: number | null;
+  averageHeatExposureScore?: number | null;
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+const getShelterStrength = (shelterLevel?: string | null) => {
+  const normalized = (shelterLevel ?? "").toLowerCase();
+  if (
+    normalized.includes("indoor") ||
+    normalized.includes("underground") ||
+    normalized.includes("tunnel")
+  ) {
+    return 0.9;
+  }
+  if (normalized.includes("shaded") || normalized.includes("shelter")) {
+    return 0.7;
+  }
+  if (normalized.includes("covered")) {
+    return 0.5;
+  }
+  return 0.2;
+};
+
+export const applyCommunityPathInfluence = (
+  metrics: RouteMetrics,
+  path?: CommunityPathInfluence | null,
+): RouteMetrics => {
+  if (!path) return metrics;
+
+  const upvotes = Math.max(0, Number(path.upvotes ?? 0));
+  const upvoteConfidence = clamp(
+    Math.log1p(upvotes) / Math.log1p(100),
+    0,
+    1,
+  );
+  const verificationStrength = path.isVerified ? 1 : 0;
+  const shelterStrength = getShelterStrength(path.shelterLevel);
+  const heatExposure = path.averageHeatExposureScore;
+  const heatStrength = clamp(
+    typeof heatExposure === "number"
+      ? (40 - heatExposure) / 20
+      : 0.35,
+    0,
+    1,
+  );
+
+  const communityConfidence = clamp(
+    verificationStrength * 0.35 + upvoteConfidence * 0.45 + shelterStrength * 0.2,
+    0,
+    1,
+  );
+  const environmentBenefit = clamp(
+    shelterStrength * 0.7 + heatStrength * 0.3,
+    0,
+    1,
+  );
+
+  // Diminishing returns: highly reliable routes should only improve slightly.
+  const reliabilityHeadroom = clamp((100 - metrics.reliabilityScore) / 100, 0, 1);
+  const reliabilityBoost = Math.round(
+    (8 * communityConfidence + 4 * environmentBenefit) * reliabilityHeadroom,
+  );
+
+  const rawStressReduction = Math.round(
+    6 * communityConfidence + 4 * environmentBenefit,
+  );
+  const stressReduction = Math.min(
+    rawStressReduction,
+    Math.round(metrics.stressScore * 0.35),
+  );
+
+  const baselineWalkMinutes = metrics.walkingDistanceMeters / 80;
+  const targetWalkMinutes =
+    typeof path.averageWalkTimeMinutes === "number"
+      ? Math.max(2, Number(path.averageWalkTimeMinutes))
+      : baselineWalkMinutes * (1 - 0.12 * environmentBenefit);
+  const walkGainMinutes = clamp(baselineWalkMinutes - targetWalkMinutes, 0, 6);
+  const durationReduction = clamp(
+    Math.round(walkGainMinutes * 0.5 + environmentBenefit * 1.5),
+    0,
+    4,
+  );
+
+  const minAllowedWalkingDistance = Math.round(metrics.walkingDistanceMeters * 0.8);
+  const targetWalkingDistanceRaw =
+    typeof path.averageWalkTimeMinutes === "number"
+      ? Math.round(path.averageWalkTimeMinutes * 80)
+      : Math.round(
+          metrics.walkingDistanceMeters * (1 - (0.06 + environmentBenefit * 0.08)),
+        );
+  const targetWalkingDistance = Math.max(
+    120,
+    Math.max(minAllowedWalkingDistance, targetWalkingDistanceRaw),
+  );
+
+  const totalDurationMinutes = Math.max(
+    3,
+    metrics.totalDurationMinutes - durationReduction,
+  );
+  const walkingDistanceMeters = Math.max(
+    120,
+    Math.min(metrics.walkingDistanceMeters, targetWalkingDistance),
+  );
+  const reliabilityScore = clamp(
+    metrics.reliabilityScore + reliabilityBoost,
+    0,
+    100,
+  );
+  const stressScore = clamp(metrics.stressScore - stressReduction, 0, 100);
+  const estimatedTimeSavedMinutes = Math.max(
+    0,
+    BASELINE_MINUTES - totalDurationMinutes,
+  );
+  const arrivalTime = new Date(
+    Date.now() + totalDurationMinutes * 60_000,
+  ).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+  return {
+    ...metrics,
+    totalDurationMinutes,
+    walkingDistanceMeters,
+    reliabilityScore,
+    stressScore,
+    estimatedTimeSavedMinutes,
+    arrivalTime,
+  };
+};

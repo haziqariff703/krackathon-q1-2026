@@ -7,6 +7,7 @@ interface MetricCardProps {
   label: string;
   value: React.ReactNode;
   unit?: string;
+  description?: string;
   icon: LucideIcon;
   trend?: {
     value: number;
@@ -21,6 +22,7 @@ export function MetricCard({
   label,
   value,
   unit,
+  description,
   icon: Icon,
   trend,
   variant = "default",
@@ -70,6 +72,11 @@ export function MetricCard({
             <span className="text-xs font-bold text-zinc-400">{unit}</span>
           )}
         </div>
+        {description && (
+          <p className="mt-2 text-[10px] text-zinc-500 italic normal-case leading-relaxed">
+            {description}
+          </p>
+        )}
       </div>
 
       {variant === "stress" && stressLevel !== undefined && (

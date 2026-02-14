@@ -9,12 +9,11 @@ import {
   Eye,
   Plus,
   Loader2,
-  X,
 } from "lucide-react";
 import { MapView } from "@/components/map/map-view";
+import { ReportForm } from "@/components/report-form";
 import { useMetrics } from "@/hooks/metrics-context";
 import { createClient } from "@/utils/supabase/client";
-import { toast } from "sonner";
 
 interface Report {
   id: string;
@@ -28,11 +27,6 @@ export default function SafetyPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Form State
-  const [title, setTitle] = useState("");
-  const [area, setArea] = useState("");
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -101,62 +95,6 @@ export default function SafetyPage() {
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title || !area) return;
-
-    setIsSubmitting(true);
-    const newReport = { title, area };
-
-    // Optimistic UI
-    const tempId = Math.random().toString();
-    const optimisticReport = {
-      ...newReport,
-      id: tempId,
-      created_at: new Date().toISOString(),
-    };
-    setReports([optimisticReport, ...reports.slice(0, 9)]);
-
-    try {
-      const { error } = await supabase.from("incident_reports").insert([
-        {
-          type: "safety",
-          title: newReport.title,
-          description: newReport.area,
-          location: "POINT(101.7117 3.1478)",
-        },
-      ]);
-      if (error) {
-        console.error(
-          "Supabase Error [inserting report]:",
-          error.message,
-          error.details,
-          error.hint,
-        );
-        throw error;
-      }
-
-      toast.success("Friction reported successfully!");
-      setIsModalOpen(false);
-      setTitle("");
-      setArea("");
-      fetchReports(); // Refresh to get actual data
-    } catch (err: unknown) {
-      if (err && typeof err === "object" && "message" in err) {
-        console.error(
-          "General Error [inserting report]:",
-          (err as { message: string }).message,
-        );
-      } else {
-        console.error("General Error [inserting report]:", err);
-      }
-      toast.error("Failed to report friction. Using offline mode.");
-      setIsModalOpen(false);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const riskZones = new Set(reports.map((r) => r.area)).size;
   const watcherDensity = reports.length * 12; // Simulated multiplier
@@ -282,63 +220,18 @@ export default function SafetyPage() {
 
       {/* Report Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-2000 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           />
-          <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl p-8 border border-zinc-200 animate-in zoom-in duration-300">
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-6 right-6 p-2 rounded-full hover:bg-zinc-100 text-zinc-400 transition-colors"
-            >
-              <X size={20} />
-            </button>
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <h3 className="text-2xl font-black tracking-tight text-zinc-950">
-                  Report Friction
-                </h3>
-                <p className="text-zinc-500 text-sm font-medium">
-                  Help the community by flagging risks or obstacles.
-                </p>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">
-                    Type of issue
-                  </label>
-                  <input
-                    type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Poor Lighting, Roadwork"
-                    className="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl px-5 py-4 font-bold text-zinc-900 focus:border-zinc-900 transition-colors outline-none"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 ml-1">
-                    Area / Landmark
-                  </label>
-                  <input
-                    type="text"
-                    value={area}
-                    onChange={(e) => setArea(e.target.value)}
-                    placeholder="e.g. Brickfields, Gate A"
-                    className="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl px-5 py-4 font-bold text-zinc-900 focus:border-zinc-900 transition-colors outline-none"
-                    required
-                  />
-                </div>
-                <button
-                  disabled={isSubmitting}
-                  className="w-full bg-zinc-950 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-zinc-950/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isSubmitting ? "Submitting..." : "Post Report"}
-                </button>
-              </form>
-            </div>
+          <div className="relative w-full max-w-md pointer-events-auto">
+            <ReportForm
+              onClose={() => {
+                setIsModalOpen(false);
+                fetchReports();
+              }}
+            />
           </div>
         </div>
       )}

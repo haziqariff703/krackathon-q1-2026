@@ -1,11 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   Search,
   Clock,
   ChevronRight,
-  Filter,
   Loader2,
   MapPin,
 } from "lucide-react";
@@ -16,13 +15,34 @@ export function StopList({
   onToggle,
   lat = 3.1478, // Default to Bukit Bintang
   lng = 101.7117,
+  onPickStop,
 }: {
   isCollapsed: boolean;
   onToggle: () => void;
   lat?: number;
   lng?: number;
+  onPickStop?: (stopName: string, target: "origin" | "destination") => void;
 }) {
   const { stops, loading, error } = useNearbyStops(lat, lng);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "on-time" | "delayed" | "heavy-stress"
+  >("all");
+  const [pickTarget, setPickTarget] = useState<"origin" | "destination">(
+    "origin",
+  );
+
+  const filteredStops = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return stops.filter((stop) => {
+      if (statusFilter !== "all" && stop.status !== statusFilter) return false;
+      if (!normalizedQuery) return true;
+
+      const searchable = `${stop.name} ${stop.lines.join(" ")}`.toLowerCase();
+      return searchable.includes(normalizedQuery);
+    });
+  }, [stops, query, statusFilter]);
 
   return (
     <div className="fixed left-0 top-24 bottom-24 z-60 pointer-events-none overflow-visible">
@@ -52,11 +72,6 @@ export function StopList({
             <h2 className="text-xl font-black tracking-tight text-zinc-950">
               Nearby Stops
             </h2>
-            <div className="flex items-center gap-2">
-              <button className="p-2.5 rounded-xl bg-zinc-50 text-zinc-400 hover:text-zinc-950 transition-colors">
-                <Filter size={18} />
-              </button>
-            </div>
           </div>
 
           <div className="relative group">
@@ -67,8 +82,54 @@ export function StopList({
             <input
               type="text"
               placeholder="Search stations or lines..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               className="w-full bg-zinc-50 border-none rounded-xl py-3 pl-10 pr-4 text-sm font-bold text-zinc-900 focus:ring-2 focus:ring-zinc-950 transition-all placeholder:text-zinc-400"
             />
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <div className="inline-flex rounded-xl bg-zinc-50 p-1">
+              <button
+                type="button"
+                onClick={() => setPickTarget("origin")}
+                className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                  pickTarget === "origin"
+                    ? "bg-zinc-950 text-white"
+                    : "text-zinc-500 hover:text-zinc-900"
+                }`}
+              >
+                Pick Origin
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickTarget("destination")}
+                className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                  pickTarget === "destination"
+                    ? "bg-zinc-950 text-white"
+                    : "text-zinc-500 hover:text-zinc-900"
+                }`}
+              >
+                Pick Destination
+              </button>
+            </div>
+
+            <div className="relative">
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(
+                    e.target.value as "all" | "on-time" | "delayed" | "heavy-stress",
+                  )
+                }
+                className="bg-zinc-50 rounded-xl px-2 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-950"
+              >
+                <option value="all">All Status</option>
+                <option value="on-time">On Time</option>
+                <option value="delayed">Delayed</option>
+                <option value="heavy-stress">Heavy Stress</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -85,17 +146,18 @@ export function StopList({
             <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-center">
               Mesh Link Failed: {error}
             </div>
-          ) : stops.length === 0 ? (
+          ) : filteredStops.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4 opacity-50">
               <MapPin className="w-8 h-8 text-zinc-300" />
               <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                No local particles detected
+                No stops match your filter
               </p>
             </div>
           ) : (
-            stops.map((stop) => (
+            filteredStops.map((stop) => (
               <button
                 key={stop.id}
+                onClick={() => onPickStop?.(stop.name, pickTarget)}
                 className="w-full text-left bg-white shadow-[0_4px_20px_rgb(0,0,0,0.04)] p-4 rounded-2xl border-2 border-transparent hover:border-zinc-950 transition-all group flex flex-col gap-3"
               >
                 <div className="flex items-center justify-between">

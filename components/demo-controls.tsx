@@ -24,6 +24,7 @@ interface DemoControlsProps {
   isCompact?: boolean;
   noBorder?: boolean;
   noGlass?: boolean;
+  description?: string;
 }
 
 export function DemoControls({
@@ -40,6 +41,7 @@ export function DemoControls({
   isCompact = false,
   noBorder = false,
   noGlass = false,
+  description = "Adjust assumptions to preview how delay, heat, walking time, and safety risk can change trip output.",
 }: DemoControlsProps) {
   return (
     <div
@@ -82,6 +84,12 @@ export function DemoControls({
           </span>
         </button>
       </div>
+
+      <p
+        className={`${isCompact ? "text-[9px]" : "text-[10px]"} text-zinc-500 italic normal-case leading-relaxed`}
+      >
+        {description}
+      </p>
 
       <div className={`${isCompact ? "space-y-3" : "space-y-4"}`}>
         {/* Delay Control */}

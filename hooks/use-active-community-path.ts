@@ -24,7 +24,7 @@ export function useActiveCommunityPath() {
       const { data, error } = await supabase
         .from("community_paths")
         .select(
-          "id,name,average_walk_time_minutes,average_heat_exposure_score,upvotes,is_verified,created_at",
+          "id,name,shelter_level,average_walk_time_minutes,average_heat_exposure_score,upvotes,is_verified,created_at",
         )
         .order("is_verified", { ascending: false })
         .order("upvotes", { ascending: false })
@@ -68,7 +68,8 @@ export function useActiveCommunityPath() {
       setPath({
         id: top.id,
         name: top.name,
-        shelterLevel: null,
+        shelterLevel:
+          typeof top.shelter_level === "string" ? top.shelter_level : null,
         averageWalkTimeMinutes:
           top.average_walk_time_minutes !== null
             ? Number(top.average_walk_time_minutes)

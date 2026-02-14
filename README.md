@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Arus — Last-Mile Reliability Engine
 
-## Getting Started
+Arus is a Next.js + Supabase app for simulating urban last-mile transit reliability with live community signals (incidents, upvotes, community paths, and system stats).
 
-First, run the development server:
+## Tech Stack
+
+- Next.js 16 (App Router, Turbopack)
+- React 19
+- Supabase (Postgres, Realtime, RLS)
+- PostGIS (geometry/geography queries)
+- Leaflet / React-Leaflet
+- Tailwind CSS
+
+## Core Features
+
+- Route simulation from selected origin/destination.
+- Nearby stops from database via RPC (`get_nearby_stops`) with real reliability mapping.
+- Live incident feed (transit / heat / safety) with realtime updates.
+- Community upvotes persisted in `report_upvotes`.
+- Active community path selection (`community_paths` fallback to `sheltered_paths`) with realtime updates.
+- System stats based on live tables (`incident_reports`, `route_simulations`, `transit_stops`).
+- Impact page fed by realtime impact calculations.
+
+## Pages
+
+- `/` Main map + route simulation + nearby stops + report modal
+- `/community` Live incident/community portal
+- `/safety` Safety reporting and status
+- `/impact` Realtime impact dashboard
+- `/explore` Additional exploration view
+
+## Local Setup
+
+1. Install dependencies
+
+```bash
+npm install
+```
+
+2. Create `.env.local`
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+3. Run app
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Production check (recommended before demo/submission)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+npm run start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database Setup (Supabase SQL Editor)
 
-## Learn More
+Run migrations in `supabase/migrations` in filename order:
 
-To learn more about Next.js, take a look at the following resources:
+1. `20260214_initial_schema.sql`
+2. `20260214_backend_expansion.sql`
+3. `20260214_report_enhancements.sql`
+4. `20260214_report_upvotes_policies.sql`
+5. `20260214_route_simulation_backend.sql`
+6. `20260214_system_stats.sql`
+7. `20260214_upvote_trigger_hardening.sql`
+8. `20260215_community_paths_seed.sql`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Required extensions:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `pgcrypto`
+- `uuid-ossp`
+- `postgis`
 
-## Deploy on Vercel
+## Main Tables / Functions Used
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `public.transit_stops`
+- `public.route_simulations`
+- `public.incident_reports`
+- `public.report_upvotes`
+- `public.community_paths`
+- `public.sheltered_paths`
+- `public.commuter_impact`
+- `public.get_nearby_stops(...)`
+- `public.simulate_route(...)` (optional backend simulation RPC)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Realtime Channels
+
+- Incident updates (`incident_reports`, `report_upvotes`)
+- Active community path updates (`community_paths`, `sheltered_paths`)
+- System stats updates (`incident_reports`, `route_simulations`, `transit_stops`)
+- Impact updates (`trip_logs`, `commuter_impact`)
+
+## Known Limitations
+
+- Route geometry can still use demo/fallback route building for unmatched OD pairs.
+- Live vehicle positions are currently mock-driven.
+- Nearby stop wait time is currently simulated (reliability is real from DB).
+- Linting still includes some existing non-blocking project issues outside core demo flow.
+
+## Submission Notes
+
+For judging/demo, ensure:
+
+- Supabase env vars are set.
+- Migrations are applied.
+- At least a few rows exist in `transit_stops`, `incident_reports`, and `community_paths`.
+- You run `npm run build` successfully before presenting.

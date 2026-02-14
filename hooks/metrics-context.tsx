@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import type { RouteMetrics } from "@/types";
 
 interface MetricsContextType {
@@ -43,40 +43,52 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
   const [routeMetrics, setRouteMetrics] = useState<RouteMetrics | null>(null);
 
   const metrics = useMemo(() => {
-    // Baseline from route or defaults
     const baselineReliability = (routeMetrics?.reliabilityScore ?? 100) / 100;
     const baselineStress = routeMetrics?.stressScore ?? 5;
     const baselineSavings = routeMetrics?.estimatedTimeSavedMinutes ?? 15;
-
-    // Reliability Logic: 1.0 (perfect) down to 0.0
-    const reliabilityScore = Math.max(
-      0,
-      baselineReliability - delayMinutes / 30,
+    const baselineWalkingMinutes = Math.max(
+      3,
+      Math.round((routeMetrics?.walkingDistanceMeters ?? 800) / 80),
     );
 
-    // Stress Score Logic: 0–100 (Lower is better)
-    // Base components (scaled to contribution points)
-    const delayImpact = (delayMinutes / 30) * 40;
-    const heatImpact = ((heatIndex - 25) / 20) * 30;
-    const walkingImpact = (walkingTime / 20) * 20;
-    const safetyImpact = (safetyRisk / 10) * 10;
+    const delayPenalty = Math.min(0.4, (delayMinutes / 30) * 0.38);
+    const heatPenalty = Math.min(
+      0.18,
+      Math.max(0, (heatIndex - 30) / 20) * 0.18,
+    );
+    const walkingPenalty = Math.min(
+      0.12,
+      Math.max(0, (walkingTime - baselineWalkingMinutes) / 20) * 0.12,
+    );
+    const safetyPenalty = Math.min(0.2, (safetyRisk / 10) * 0.2);
+    const shelterBonus = isSheltered ? 0.06 : 0;
 
-    // Apply shelter reduction (50% reduction in heat impact if sheltered)
-    const effectiveHeatImpact = isSheltered ? heatImpact * 0.5 : heatImpact;
-
-    // Total Stress = Baseline + User-modified impacts
-    const stressScore = Math.min(
-      100,
-      Math.round(
-        baselineStress +
-          delayImpact +
-          effectiveHeatImpact +
-          walkingImpact +
-          safetyImpact,
+    const reliabilityScore = Math.max(
+      0,
+      Math.min(
+        1,
+        baselineReliability -
+          delayPenalty -
+          heatPenalty -
+          walkingPenalty -
+          safetyPenalty +
+          shelterBonus,
       ),
     );
 
-    // Recommendation Logic
+    const delayImpact = delayMinutes * 1.3;
+    const effectiveHeat = isSheltered ? Math.max(26, heatIndex - 4) : heatIndex;
+    const heatImpact = Math.max(0, effectiveHeat - 28) * 1.8;
+    const walkingImpact =
+      Math.max(0, walkingTime - baselineWalkingMinutes) * 2.1;
+    const safetyImpact = safetyRisk * 3.2;
+    const stressScore = Math.min(
+      100,
+      Math.round(
+        baselineStress + delayImpact + heatImpact + walkingImpact + safetyImpact,
+      ),
+    );
+
     let recommendation = {
       label: "Optimal Flow",
       type: "success",
@@ -119,14 +131,24 @@ export function MetricsProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    // Impact Metrics
+    const heatLoadFactor = Math.max(0, (heatIndex - 28) / 12);
+    const riskDrag = Math.round(safetyRisk * 0.8);
+    const extraWalkingDrag = Math.max(0, walkingTime - baselineWalkingMinutes);
     const impact = {
-      minutesSaved: Math.max(0, baselineSavings - delayMinutes),
-      heatMinutesAvoided: isSheltered ? walkingTime : 0,
+      minutesSaved: Math.max(
+        0,
+        Math.round(
+          baselineSavings - delayMinutes - extraWalkingDrag * 0.5 - riskDrag * 0.3,
+        ),
+      ),
+      heatMinutesAvoided: isSheltered
+        ? Math.round(Math.max(0, walkingTime * heatLoadFactor))
+        : 0,
       communityImpactScore: Math.round(
-        reliabilityScore * 40 +
-          Math.max(0, baselineSavings - delayMinutes) * 2 +
-          (isSheltered ? 20 : 0),
+        reliabilityScore * 45 +
+          Math.max(0, baselineSavings - delayMinutes) * 1.8 +
+          (isSheltered ? 16 : 0) -
+          safetyRisk * 1.5,
       ),
     };
 

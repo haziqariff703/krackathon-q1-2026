@@ -23,6 +23,7 @@ import {
   buildMetricsFromSimulation,
   buildRouteMetrics,
   buildFallbackRoute,
+  applyCommunityPathInfluence,
   findSimulatedRoute,
   TRANSIT_PLACE_OPTIONS,
   DEFAULT_ORIGIN,
@@ -137,6 +138,17 @@ export default function ArusDashboard() {
           Math.sin(dLng / 2) *
           Math.sin(dLng / 2);
       return 6371000 * (2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+    },
+    [],
+  );
+
+  const normalizeReliabilityValue = React.useCallback(
+    (value: number | string | null | undefined) => {
+      const numeric =
+        typeof value === "string" ? Number(value) : Number(value ?? NaN);
+      if (!Number.isFinite(numeric)) return 0.9;
+      if (numeric > 1) return Math.max(0, Math.min(1, numeric / 100));
+      return Math.max(0, Math.min(1, numeric));
     },
     [],
   );
@@ -262,9 +274,11 @@ export default function ArusDashboard() {
               5,
               Math.round((distanceMeters / 1000) * 6.5 + 8),
             );
-            const originReliability = Number(originStop?.reliability ?? 0.9);
-            const destinationReliability = Number(
-              destinationStop?.reliability ?? 0.9,
+            const originReliability = normalizeReliabilityValue(
+              originStop?.reliability,
+            );
+            const destinationReliability = normalizeReliabilityValue(
+              destinationStop?.reliability,
             );
             const reliabilityPct = Math.round(
               Math.max(
@@ -307,8 +321,10 @@ export default function ArusDashboard() {
               backendDestination ?? resolvedDestination.position,
             );
             setRoute(fallback);
-            const metricsSummary =
-              backendMetrics ?? buildRouteMetrics(fallback, simulationDepth);
+            const metricsSummary = applyCommunityPathInfluence(
+              backendMetrics ?? buildRouteMetrics(fallback, simulationDepth),
+              activeCommunityPath,
+            );
             finalSummary = metricsSummary;
             setRouteSummary(metricsSummary);
             setRouteMetrics(metricsSummary);
@@ -325,8 +341,10 @@ export default function ArusDashboard() {
             setRouteMetrics(null);
           }
         } else {
-          const metricsSummary =
-            backendMetrics ?? buildRouteMetrics(nextRoute, simulationDepth);
+          const metricsSummary = applyCommunityPathInfluence(
+            backendMetrics ?? buildRouteMetrics(nextRoute, simulationDepth),
+            activeCommunityPath,
+          );
           finalSummary = metricsSummary;
           setRoute(nextRoute);
           setRouteSummary(metricsSummary);
@@ -390,9 +408,28 @@ export default function ArusDashboard() {
     if (routeError) setRouteError(null);
   };
 
-  const handleMapMove = (lat: number, lng: number) => {
-    setMapCenter({ lat, lng });
-  };
+  const handlePickStop = React.useCallback(
+    (stopName: string, target: "origin" | "destination") => {
+      if (target === "origin") {
+        setOrigin(stopName);
+        setOriginMode("manual");
+      } else {
+        setDestination(stopName);
+      }
+      if (routeError) setRouteError(null);
+    },
+    [routeError],
+  );
+
+  const handleMapMove = React.useCallback((lat: number, lng: number) => {
+    setMapCenter((prev) => {
+      // Only update if moved more than ~100m to prevent infinite re-render loops
+      const dlat = Math.abs(prev.lat - lat);
+      const dlng = Math.abs(prev.lng - lng);
+      if (dlat < 0.001 && dlng < 0.001) return prev;
+      return { lat, lng };
+    });
+  }, []);
 
   const handleCommitToJourney = () => {
     if (!route) return;
@@ -435,6 +472,7 @@ export default function ArusDashboard() {
           onToggle={() => setIsStopListCollapsed(!isStopListCollapsed)}
           lat={mapCenter.lat}
           lng={mapCenter.lng}
+          onPickStop={handlePickStop}
         />
 
         {/* Floating Simulation Controls Panel (Desktop only) */}
@@ -452,6 +490,7 @@ export default function ArusDashboard() {
             placeOptions={stopOptions}
             originHint={originHint}
             destinationHint={destinationHint}
+            description="Set origin and destination, then run simulation to generate route summary from live stop data."
             compact={true}
           />
           <div>
@@ -466,6 +505,7 @@ export default function ArusDashboard() {
               setSafetyRisk={setSafetyRisk}
               isSheltered={isSheltered}
               setIsSheltered={setIsSheltered}
+              description="Tune delay, heat, walking time, and safety assumptions to test route conditions."
               noGlass={true}
             />
           </div>
@@ -478,6 +518,7 @@ export default function ArusDashboard() {
                 systemStats.totalReports + systemStats.totalSimulations
               }
               unit={routeSummary?.simulationDepth ? "LVL" : "DATA"}
+              description="Simulation depth indicates how much combined route and system data was used for this output."
               icon={Clock}
               noGlass={true}
             />
@@ -486,6 +527,7 @@ export default function ArusDashboard() {
           <div className="pb-8">
             <RecommendationPanel
               recommendation={recommendation}
+              description="Recommendation gives the best next action based on current reliability and stress scores."
               noGlass={true}
               onCommit={handleCommitToJourney}
             />
@@ -629,6 +671,7 @@ export default function ArusDashboard() {
                 placeOptions={stopOptions}
                 originHint={originHint}
                 destinationHint={destinationHint}
+                description="Choose origin and destination, then simulate to calculate the current trip summary."
                 compact={true}
               />
               <DemoControls
@@ -642,12 +685,14 @@ export default function ArusDashboard() {
                 setSafetyRisk={setSafetyRisk}
                 isSheltered={isSheltered}
                 setIsSheltered={setIsSheltered}
+                description="Adjust simulation assumptions to compare route outcomes before committing to the trip."
                 isCompact={true}
                 noBorder={true}
               />
               <div className="pt-2">
                 <RecommendationPanel
                   recommendation={recommendation}
+                  description="Use this recommendation as final decision support after simulation is complete."
                   noBorder={true}
                   onCommit={handleCommitToJourney}
                 />

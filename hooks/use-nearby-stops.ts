@@ -22,7 +22,7 @@ type RawNearbyStop = {
   stop_id?: string;
   name: string;
   lines: string[];
-  reliability: number;
+  reliability: number | string | null;
   latitude: number;
   longitude: number;
   distance_meters: number;
@@ -43,6 +43,21 @@ function describeRpcError(err: unknown) {
   } catch {
     return String(err);
   }
+}
+
+function toReliabilityPercent(value: number | string | null | undefined) {
+  const parsed = typeof value === "string" ? Number(value) : Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  if (parsed <= 1) return Math.round(Math.max(0, Math.min(1, parsed)) * 100);
+  return Math.round(Math.max(0, Math.min(100, parsed)));
+}
+
+function reliabilityToStatus(
+  reliability: number,
+): "on-time" | "delayed" | "heavy-stress" {
+  if (reliability >= 85) return "on-time";
+  if (reliability >= 65) return "delayed";
+  return "heavy-stress";
 }
 
 export function useNearbyStops(
@@ -69,13 +84,8 @@ export function useNearbyStops(
           const fallback = getMockNearbyStops(lat, lng, radiusMeters);
           const mappedStops: StopItem[] = fallback.map((stop) => ({
             ...stop,
-            reliability: Math.round(stop.reliability * 100),
-            status:
-              stop.reliability > 0.9
-                ? "on-time"
-                : stop.reliability > 0.7
-                  ? "delayed"
-                  : "heavy-stress",
+            reliability: toReliabilityPercent(stop.reliability),
+            status: reliabilityToStatus(toReliabilityPercent(stop.reliability)),
             waitTime: Math.floor(Math.random() * 10) + 1,
           }));
           setStops(mappedStops);
@@ -101,46 +111,44 @@ export function useNearbyStops(
 
         // Map database status if needed (we'll derive it from reliability for now)
         const mappedStops: StopItem[] = (Array.isArray(data) ? data : []).map(
-          (stop: RawNearbyStop) => ({
+          (stop: RawNearbyStop) => {
+            const reliability = toReliabilityPercent(stop.reliability);
+            return {
             ...stop,
             id: resolveStopId(stop),
             stop_id: stop.stop_id,
-          reliability: Math.round(stop.reliability * 100),
-          status:
-            stop.reliability > 0.9
-              ? "on-time"
-              : stop.reliability > 0.7
-                ? "delayed"
-                : "heavy-stress",
-          waitTime: Math.floor(Math.random() * 10) + 1, // Mock wait time for now since real-time GTFS isn't here yet
-          }),
+              reliability,
+              status: reliabilityToStatus(reliability),
+              waitTime: Math.floor(Math.random() * 10) + 1,
+            };
+          },
         );
 
         setStops(mappedStops);
-      } catch (err: any) {
+        setError(null);
+      } catch (err: unknown) {
         const message =
-          err?.message ||
-          err?.details ||
-          "Failed to fetch nearby stops. Showing demo data.";
+          err instanceof Error
+            ? err.message
+            : "Failed to fetch nearby stops.";
         console.error("Error fetching nearby stops:", err);
-        const fallback = getMockNearbyStops(lat, lng, radiusMeters);
-        if (fallback.length > 0) {
-          const mappedStops: StopItem[] = fallback.map((stop) => ({
-            ...stop,
-            reliability: Math.round(stop.reliability * 100),
-            status:
-              stop.reliability > 0.9
-                ? "on-time"
-                : stop.reliability > 0.7
-                  ? "delayed"
-                  : "heavy-stress",
-            waitTime: Math.floor(Math.random() * 10) + 1,
-          }));
-          setStops(mappedStops);
-          setError(null);
-        } else {
+        // If Supabase is configured, prefer real data only and surface the failure.
+        // Demo fallback is only for environments without Supabase keys.
+        if (supabase) {
+          setStops([]);
           setError(message);
+          return;
         }
+
+        const fallback = getMockNearbyStops(lat, lng, radiusMeters);
+        const mappedStops: StopItem[] = fallback.map((stop) => ({
+          ...stop,
+          reliability: toReliabilityPercent(stop.reliability),
+          status: reliabilityToStatus(toReliabilityPercent(stop.reliability)),
+          waitTime: Math.floor(Math.random() * 10) + 1,
+        }));
+        setStops(mappedStops);
+        setError(null);
       } finally {
         setLoading(false);
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -62,6 +62,44 @@ const CATEGORY_ICONS: Record<string, L.Icon> = {
 };
 
 const CENTER: [number, number] = [3.147, 101.693]; // Kuala Lumpur
+
+// Transit type classifier from line names
+function getTransitType(lines: string[]): "mrt" | "lrt" | "bus" {
+  const joined = lines.join(" ").toLowerCase();
+  if (
+    joined.includes("mrt") ||
+    joined.includes("kajang") ||
+    joined.includes("putrajaya")
+  )
+    return "mrt";
+  if (
+    joined.includes("lrt") ||
+    joined.includes("kelana") ||
+    joined.includes("ampang") ||
+    joined.includes("monorail")
+  )
+    return "lrt";
+  return "bus";
+}
+
+// Color-coded DivIcons for each transit type
+function makeTransitIcon(type: "mrt" | "lrt" | "bus") {
+  const colors = { mrt: "#0d9488", lrt: "#7c3aed", bus: "#d97706" };
+  const labels = { mrt: "M", lrt: "L", bus: "B" };
+  return L.divIcon({
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -14],
+    html: `<div style="width:24px;height:24px;border-radius:50%;background:${colors[type]};display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:11px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.25);">${labels[type]}</div>`,
+  });
+}
+
+const TRANSIT_ICONS = {
+  mrt: makeTransitIcon("mrt"),
+  lrt: makeTransitIcon("lrt"),
+  bus: makeTransitIcon("bus"),
+};
 
 // Mock Community Paths GeoJSON (Sheltered/Safe walking routes)
 const COMMUNITY_PATHS: GeoJSON.FeatureCollection = {
@@ -161,6 +199,15 @@ function RouteOverlay({ route }: { route: TransitRoute | null }) {
   );
 }
 
+interface TransitStopMarker {
+  id: string;
+  name: string;
+  lines: string[];
+  reliability: number;
+  latitude: number;
+  longitude: number;
+}
+
 interface MapInnerProps {
   metrics: {
     reliabilityScore: number;
@@ -175,6 +222,7 @@ interface MapInnerProps {
   route: TransitRoute | null;
   reports?: IncidentReport[];
   vehicles?: TransitVehicle[];
+  transitStops?: TransitStopMarker[];
   activeCommunityPath?: ActiveCommunityPath | null;
   onMove?: (lat: number, lng: number) => void;
 }
@@ -184,9 +232,11 @@ export default function MapInner({
   route,
   reports,
   vehicles,
+  transitStops,
   activeCommunityPath = null,
   onMove,
 }: MapInnerProps) {
+  const [showLegend, setShowLegend] = useState(true);
   const shelteredStyle = {
     color: "#10b981", // Emerald 500
     weight: 5,
@@ -286,15 +336,60 @@ export default function MapInner({
           </CircleMarker>
         ))}
 
-        {/* Mock Transit Stop for Demo */}
-        <Marker position={[3.15, 101.71]}>
-          <Popup>
-            <div className="p-1 font-sans">
-              <div className="font-bold text-sm">KLCC Feeder Stop</div>
-              <div className="text-xs text-zinc-500">RapidKL T402</div>
-            </div>
-          </Popup>
-        </Marker>
+        {/* Transit Stop Markers (MRT / LRT / Bus) */}
+        {transitStops?.map((stop) => {
+          const type = getTransitType(stop.lines);
+          return (
+            <Marker
+              key={stop.id}
+              position={[stop.latitude, stop.longitude]}
+              icon={TRANSIT_ICONS[type]}
+            >
+              <Popup minWidth={180}>
+                <div className="p-2 font-sans">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className="inline-block w-5 h-5 rounded-full text-white text-[10px] font-black flex items-center justify-center"
+                      style={{
+                        background:
+                          type === "mrt"
+                            ? "#0d9488"
+                            : type === "lrt"
+                              ? "#7c3aed"
+                              : "#d97706",
+                      }}
+                    >
+                      {type === "mrt" ? "M" : type === "lrt" ? "L" : "B"}
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-950">
+                      {type.toUpperCase()} Station
+                    </span>
+                  </div>
+                  <div className="font-bold text-sm mb-1">{stop.name}</div>
+                  <div className="text-[10px] text-zinc-500 font-medium">
+                    {stop.lines.join(" • ")}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-zinc-100 flex items-center justify-between">
+                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                      Reliability
+                    </span>
+                    <span
+                      className={`text-xs font-black ${
+                        stop.reliability > 90
+                          ? "text-emerald-600"
+                          : stop.reliability > 70
+                            ? "text-amber-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {stop.reliability}%
+                    </span>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
 
       {/* Map Status Overlays: Top Center (Desktop Only) */}
@@ -338,53 +433,105 @@ export default function MapInner({
         </div>
       </div>
 
-      {/* Custom Map Overlays: Bottom Left on Mobile, Bottom Right on Desktop */}
-      <div className="absolute bottom-28 left-4 sm:bottom-6 sm:right-6 sm:left-auto z-1000 flex flex-col gap-3 pointer-events-auto">
-        <div className="glass px-4 py-3 rounded-2xl border-2 border-emerald-500/20 flex flex-col gap-1 shadow-2xl">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-1 bg-emerald-500 rounded-full" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-950">
-              Active Community Path
+      {/* Map Legend + Active Path */}
+      <div className="absolute bottom-28 left-4 sm:top-28 sm:left-6 sm:bottom-auto z-1000 flex flex-col gap-2 pointer-events-auto">
+        {/* Toggle Legend Button */}
+        <button
+          onClick={() => setShowLegend(!showLegend)}
+          className="self-end glass px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-600 hover:text-zinc-950 transition-colors shadow-lg border border-zinc-200/50"
+        >
+          {showLegend ? "Hide Legend" : "Show Legend"}
+        </button>
+
+        {showLegend && (
+          <div className="glass px-4 py-3 rounded-2xl border border-zinc-200/50 flex flex-col gap-2.5 shadow-2xl">
+            {/* Legend Title */}
+            <div className="text-[9px] font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-100 pb-1.5">
+              Map Legend
+            </div>
+
+            {/* Transit Types */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-[#0d9488] flex items-center justify-center text-white text-[9px] font-black">
+                  M
+                </div>
+                <span className="text-[10px] font-bold text-zinc-700">
+                  MRT Station
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-[#7c3aed] flex items-center justify-center text-white text-[9px] font-black">
+                  L
+                </div>
+                <span className="text-[10px] font-bold text-zinc-700">
+                  LRT Station
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-[#d97706] flex items-center justify-center text-white text-[9px] font-black">
+                  B
+                </div>
+                <span className="text-[10px] font-bold text-zinc-700">
+                  Bus Stop
+                </span>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-zinc-100" />
+
+            {/* Community Path */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-5 h-0.5 bg-emerald-500 rounded-full"
+                  style={{ borderTop: "2px dashed #10b981" }}
+                />
+                <span className="text-[10px] font-bold text-zinc-700">
+                  Community Path
+                </span>
+              </div>
+              <div className="ml-7 text-[9px] font-medium text-emerald-600 leading-snug">
+                {activeCommunityPath?.name ?? "Optimized for Heat Avoidance"}
+                {activeCommunityPath && (
+                  <span className="text-zinc-400 ml-1">
+                    • {activeCommunityPath.isVerified ? "✓" : "○"}{" "}
+                    {activeCommunityPath.upvotes} votes
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile-Only Trip Status Feed */}
+        <div className="flex sm:hidden glass px-4 py-3 rounded-2xl items-center gap-4 shadow-2xl border border-zinc-200/50">
+          <div className="flex flex-col">
+            <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
+              Saved
+            </span>
+            <span className="text-[10px] font-black text-zinc-950 italic">
+              {metrics.impact.minutesSaved}m
             </span>
           </div>
-          <div className="text-[9px] font-medium text-emerald-600 uppercase tracking-tighter mb-1">
-            {activeCommunityPath?.name ?? "Optimized for Heat Avoidance"}
+          <div className="w-px h-4 bg-zinc-100" />
+          <div className="flex flex-col">
+            <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
+              Heat
+            </span>
+            <span className="text-[10px] font-black text-zinc-950 italic">
+              {metrics.heatIndex}°C
+            </span>
           </div>
-          {activeCommunityPath && (
-            <div className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest">
-              {activeCommunityPath.isVerified ? "Verified" : "Unverified"} •{" "}
-              {activeCommunityPath.upvotes} upvotes
-            </div>
-          )}
-
-          {/* Mobile-Only Trip Status Feed */}
-          <div className="flex sm:hidden items-center gap-4 mt-2 pt-2 border-t border-emerald-500/10">
-            <div className="flex flex-col">
-              <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
-                Saved
-              </span>
-              <span className="text-[10px] font-black text-zinc-950 italic">
-                {metrics.impact.minutesSaved}m
-              </span>
-            </div>
-            <div className="w-px h-4 bg-zinc-100" />
-            <div className="flex flex-col">
-              <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
-                Heat
-              </span>
-              <span className="text-[10px] font-black text-zinc-950 italic">
-                {metrics.heatIndex}°C
-              </span>
-            </div>
-            <div className="w-px h-4 bg-zinc-100" />
-            <div className="flex flex-col">
-              <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
-                Impact
-              </span>
-              <span className="text-[10px] font-black text-zinc-950 italic">
-                {metrics.impact.communityImpactScore} PTS
-              </span>
-            </div>
+          <div className="w-px h-4 bg-zinc-100" />
+          <div className="flex flex-col">
+            <span className="text-[7px] font-black uppercase text-zinc-400 leading-none mb-0.5">
+              Impact
+            </span>
+            <span className="text-[10px] font-black text-zinc-950 italic">
+              {metrics.impact.communityImpactScore} PTS
+            </span>
           </div>
         </div>
       </div>

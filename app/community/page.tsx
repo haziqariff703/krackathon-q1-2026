@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Zap,
   Camera,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLiveReports } from "@/hooks/use-live-reports";

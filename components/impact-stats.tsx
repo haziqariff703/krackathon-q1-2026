@@ -7,12 +7,18 @@ interface ImpactStatsProps {
   totalMinutesSaved: number;
   totalHeatAvoided: number;
   communityScore: number;
+  delayDescription?: string;
+  heatDescription?: string;
+  communityDescription?: string;
 }
 
 export function ImpactStats({
   totalMinutesSaved,
   totalHeatAvoided,
   communityScore,
+  delayDescription = "Estimated commuter minutes recovered from route coordination and live transit signals.",
+  heatDescription = "Estimated outdoor heat exposure minutes avoided through shaded or validated safer paths.",
+  communityDescription = "Composite utility score from simulations, community contributions, and verified upvotes.",
 }: ImpactStatsProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom duration-700 delay-100">
@@ -32,6 +38,9 @@ export function ImpactStats({
           <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">
             Collective Delay Offset
           </div>
+          <p className="text-[10px] text-zinc-500 font-medium mt-2 leading-relaxed normal-case tracking-normal">
+            {delayDescription}
+          </p>
         </div>
         <div className="h-1.5 w-full bg-emerald-100 rounded-full overflow-hidden">
           <div className="h-full bg-emerald-500 w-3/4 animate-pulse" />
@@ -47,11 +56,14 @@ export function ImpactStats({
         </div>
         <div>
           <div className="text-3xl font-black text-zinc-950 tracking-tighter">
-            {totalHeatAvoided.toLocaleString()}°C
+            {totalHeatAvoided.toLocaleString()}m
           </div>
           <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">
             Heat Exposure Mitigated
           </div>
+          <p className="text-[10px] text-zinc-500 font-medium mt-2 leading-relaxed normal-case tracking-normal">
+            {heatDescription}
+          </p>
         </div>
         <div className="h-1.5 w-full bg-orange-100 rounded-full overflow-hidden">
           <div className="h-full bg-orange-500 w-1/2" />
@@ -74,6 +86,9 @@ export function ImpactStats({
           <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">
             Network Utility Score
           </div>
+          <p className="text-[10px] text-zinc-500 font-medium mt-2 leading-relaxed normal-case tracking-normal">
+            {communityDescription}
+          </p>
         </div>
         <div className="flex -space-x-2">
           {[1, 2, 3, 4].map((i) => (

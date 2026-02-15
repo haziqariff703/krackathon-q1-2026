@@ -12,3 +12,16 @@ export function clampText(text: string, maxLength: number) {
   if (text.length <= maxLength) return text;
   return `${text.slice(0, Math.max(0, maxLength - 1))}\u2026`;
 }
+
+export type IncidentFilter = "all" | "safety" | "transit" | "heat";
+export type NormalizedIncidentType = "transit" | "heat" | "safety" | "other";
+
+export function normalizeIncidentType(
+  rawType: string | undefined,
+): NormalizedIncidentType {
+  const type = (rawType || "").trim().toLowerCase();
+  if (type === "transit" || type === "delay") return "transit";
+  if (type === "heat") return "heat";
+  if (type === "safety") return "safety";
+  return "other";
+}

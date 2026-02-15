@@ -11,6 +11,8 @@ type RouteSimulationRow = {
   reliability_score: number;
   stress_score: number;
   simulation_depth: number | null;
+  origin_name?: string | null;
+  destination_name?: string | null;
 };
 
 type CommuterImpactRow = {
@@ -28,6 +30,7 @@ type LiveImpactState = {
   stressScore: number;
   reliabilityScore: number;
   routeMetrics: RouteMetrics | null;
+  latestRouteName: string | null;
   totalSimulations: number;
 };
 
@@ -40,6 +43,7 @@ const DEFAULT_LIVE_IMPACT: LiveImpactState = {
   stressScore: 0,
   reliabilityScore: 0,
   routeMetrics: null,
+  latestRouteName: null,
   totalSimulations: 0,
 };
 
@@ -56,7 +60,7 @@ export function useLiveImpact() {
         supabase
           .from("route_simulations")
           .select(
-            "duration_minutes,distance_meters,reliability_score,stress_score,simulation_depth",
+            "duration_minutes,distance_meters,reliability_score,stress_score,simulation_depth,origin_name,destination_name",
           )
           .order("created_at", { ascending: false })
           .limit(1),
@@ -141,6 +145,10 @@ export function useLiveImpact() {
             simulation_depth: latest.simulation_depth ?? undefined,
           })
         : null;
+      const latestRouteName =
+        latest?.origin_name && latest?.destination_name
+          ? `${latest.origin_name} -> ${latest.destination_name}`
+          : null;
 
       setState({
         impact: {
@@ -154,6 +162,7 @@ export function useLiveImpact() {
           Math.min(1, (routeMetrics?.reliabilityScore ?? avgReliabilityRaw) / 100),
         ),
         routeMetrics,
+        latestRouteName,
         totalSimulations,
       });
       setError(null);

@@ -19,8 +19,218 @@ import { useLiveReports } from "@/hooks/use-live-reports";
 import { useLiveImpact } from "@/hooks/use-live-impact";
 import { useSystemStats } from "@/hooks/use-system-stats";
 import { ImpactStats } from "@/components/impact-stats";
+import { normalizeIncidentType, type IncidentFilter } from "@/utils/helpers";
 
-type IncidentFilter = "all" | "safety" | "transit" | "heat";
+type ReportLike = {
+  type: string;
+  upvotes: number;
+  created_at?: string;
+};
+
+type LiveImpactLike = {
+  impact: {
+    communityImpactScore: number;
+    heatMinutesAvoided: number;
+    minutesSaved: number;
+  };
+  totalSimulations: number;
+};
+
+type SystemStatsLike = {
+  totalSimulations: number;
+  totalUpvotes: number;
+};
+
+type AggregateStats = {
+  minutesSaved: number;
+  heatAvoided: number;
+  communityScore: number;
+};
+
+const toWholeNonNegative = (value: number) => Math.max(0, Math.round(value));
+
+const IMPACT_CARD_WEIGHTS = {
+  delay: {
+    transitBase: 4.5,
+    transitUpvote: 0.8,
+    heatSynergy: 0.2,
+    simulationLift: 0.25,
+    safetyPenalty: 1.4,
+    safetyUpvotePenalty: 0.35,
+  },
+  heat: {
+    heatBase: 6,
+    heatUpvote: 1.05,
+    transitSynergy: 0.3,
+    simulationLift: 0.15,
+  },
+  recency: {
+    halfLifeHours: 8,
+    minWeight: 0.35,
+  },
+} as const;
+
+const getRecencyWeight = (createdAt: string | undefined, nowMs: number) => {
+  if (!createdAt) return 1;
+
+  const createdMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdMs)) return 1;
+
+  const ageHours = Math.max(0, (nowMs - createdMs) / (1000 * 60 * 60));
+  const decay = Math.pow(0.5, ageHours / IMPACT_CARD_WEIGHTS.recency.halfLifeHours);
+  return Math.max(IMPACT_CARD_WEIGHTS.recency.minWeight, decay);
+};
+
+function calculateCollectiveDelayOffset({
+  liveMinutesSaved,
+  reports,
+  totalSimulations,
+  nowMs,
+}: {
+  liveMinutesSaved: number;
+  reports: ReportLike[];
+  totalSimulations: number;
+  nowMs: number;
+}) {
+  if (liveMinutesSaved > 0) {
+    return liveMinutesSaved;
+  }
+
+  const signals = reports.reduce(
+    (acc, report) => {
+      const upvotes = Number(report.upvotes || 0);
+      const recency = getRecencyWeight(report.created_at, nowMs);
+      const reportType = normalizeIncidentType(report.type);
+
+      if (reportType === "transit") {
+        acc.transit +=
+          (IMPACT_CARD_WEIGHTS.delay.transitBase +
+            upvotes * IMPACT_CARD_WEIGHTS.delay.transitUpvote) *
+          recency;
+      }
+
+      if (reportType === "heat") {
+        acc.heat +=
+          (IMPACT_CARD_WEIGHTS.heat.heatBase +
+            upvotes * IMPACT_CARD_WEIGHTS.heat.heatUpvote) *
+          recency;
+      }
+
+      if (reportType === "safety") {
+        acc.safety +=
+          (IMPACT_CARD_WEIGHTS.delay.safetyPenalty +
+            upvotes * IMPACT_CARD_WEIGHTS.delay.safetyUpvotePenalty) *
+          recency;
+      }
+
+      return acc;
+    },
+    { transit: 0, heat: 0, safety: 0 },
+  );
+
+  return Math.max(
+    0,
+    signals.transit +
+      signals.heat * IMPACT_CARD_WEIGHTS.delay.heatSynergy +
+      totalSimulations * IMPACT_CARD_WEIGHTS.delay.simulationLift -
+      signals.safety,
+  );
+}
+
+function calculateHeatExposureMitigated({
+  liveHeatAvoided,
+  reports,
+  totalSimulations,
+  nowMs,
+}: {
+  liveHeatAvoided: number;
+  reports: ReportLike[];
+  totalSimulations: number;
+  nowMs: number;
+}) {
+  if (liveHeatAvoided > 0) {
+    return liveHeatAvoided;
+  }
+
+  const signals = reports.reduce(
+    (acc, report) => {
+      const upvotes = Number(report.upvotes || 0);
+      const recency = getRecencyWeight(report.created_at, nowMs);
+      const reportType = normalizeIncidentType(report.type);
+
+      if (reportType === "heat") {
+        acc.heat +=
+          (IMPACT_CARD_WEIGHTS.heat.heatBase +
+            upvotes * IMPACT_CARD_WEIGHTS.heat.heatUpvote) *
+          recency;
+      }
+
+      if (reportType === "transit") {
+        acc.transit +=
+          (IMPACT_CARD_WEIGHTS.delay.transitBase +
+            upvotes * IMPACT_CARD_WEIGHTS.delay.transitUpvote) *
+          recency;
+      }
+
+      return acc;
+    },
+    { heat: 0, transit: 0 },
+  );
+
+  return Math.max(
+    0,
+    signals.heat +
+      signals.transit * IMPACT_CARD_WEIGHTS.heat.transitSynergy +
+      totalSimulations * IMPACT_CARD_WEIGHTS.heat.simulationLift,
+  );
+}
+
+function calculateImpactCardMetrics({
+  reports,
+  liveImpact,
+  systemStats,
+}: {
+  reports: ReportLike[];
+  liveImpact: LiveImpactLike;
+  systemStats: SystemStatsLike;
+}): AggregateStats {
+  const nowMs = Date.now();
+  const reportUpvoteScore = reports.reduce(
+    (acc, report) => acc + Number(report.upvotes || 0),
+    0,
+  );
+
+  const backendScore =
+    Number(liveImpact.impact.communityImpactScore || 0) +
+    Number(systemStats.totalUpvotes || 0) +
+    Number(systemStats.totalSimulations || 0);
+  const fallbackSimulations = Math.max(
+    Number(liveImpact.totalSimulations || 0),
+    Number(systemStats.totalSimulations || 0),
+  );
+
+  const minutesSaved = calculateCollectiveDelayOffset({
+    liveMinutesSaved: Number(liveImpact.impact.minutesSaved || 0),
+    reports,
+    totalSimulations: fallbackSimulations,
+    nowMs,
+  });
+
+  const heatAvoided = calculateHeatExposureMitigated({
+    liveHeatAvoided: Number(liveImpact.impact.heatMinutesAvoided || 0),
+    reports,
+    totalSimulations: fallbackSimulations,
+    nowMs,
+  });
+
+  return {
+    minutesSaved: toWholeNonNegative(minutesSaved),
+    heatAvoided: toWholeNonNegative(heatAvoided),
+    communityScore: toWholeNonNegative(
+      Math.max(backendScore, reportUpvoteScore),
+    ),
+  };
+}
 
 export default function CommunityPage() {
   const { reports, loading, upvoteReport } = useLiveReports();
@@ -64,22 +274,15 @@ export default function CommunityPage() {
     }
   };
 
-  const aggregateStats = useMemo(() => {
-    const reportUpvoteScore = reports.reduce(
-      (acc, report) => acc + Number(report.upvotes || 0),
-      0,
-    );
-    const backendScore =
-      liveImpact.impact.communityImpactScore +
-      systemStats.totalUpvotes +
-      systemStats.totalSimulations;
-
-    return {
-      minutesSaved: Math.round(liveImpact.impact.minutesSaved),
-      heatAvoided: Math.round(liveImpact.impact.heatMinutesAvoided),
-      communityScore: Math.max(backendScore, reportUpvoteScore),
-    };
-  }, [liveImpact, reports, systemStats]);
+  const aggregateStats = useMemo(
+    () =>
+      calculateImpactCardMetrics({
+        reports,
+        liveImpact,
+        systemStats,
+      }),
+    [reports, liveImpact, systemStats],
+  );
 
   const sortedReports = useMemo(
     () =>
@@ -97,7 +300,9 @@ export default function CommunityPage() {
     () =>
       activeFilter === "all"
         ? sortedReports
-        : sortedReports.filter((report) => report.type === activeFilter),
+        : sortedReports.filter(
+            (report) => normalizeIncidentType(report.type) === activeFilter,
+          ),
     [activeFilter, sortedReports],
   );
 
@@ -182,6 +387,9 @@ export default function CommunityPage() {
             totalMinutesSaved={aggregateStats.minutesSaved}
             totalHeatAvoided={aggregateStats.heatAvoided}
             communityScore={aggregateStats.communityScore}
+            delayDescription="Net commuter minutes recovered from delay-aware routing and high-signal transit reports."
+            heatDescription="Total heat-risk minutes avoided through shaded route adoption and heat incident responses."
+            communityDescription="Blended network score based on simulations, verified contributions, and active upvote momentum."
           />
 
           {isLiveLoading && reports.length === 0 ? (

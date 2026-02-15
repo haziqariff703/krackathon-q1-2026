@@ -47,6 +47,16 @@ export default function ImpactPage() {
   const activeReliabilityScore = hasLiveData
     ? liveImpact.reliabilityScore
     : reliabilityScore;
+  const latestRouteName = liveImpact.latestRouteName ?? "Route name unavailable";
+  const activeHeatAvoided = Math.max(
+    0,
+    Math.round(
+      Math.max(
+        Number(liveImpact.impact.heatMinutesAvoided || 0),
+        Number(impact.heatMinutesAvoided || 0),
+      ),
+    ),
+  );
 
   const hasJourney =
     delayMinutes > 0 || activeRouteMetrics !== null || hasLiveData;
@@ -105,19 +115,22 @@ export default function ImpactPage() {
                   label="Community Depth"
                   value={<CountUp end={activeImpact.communityImpactScore} />}
                   unit="PTS"
+                  description="Composite depth score from network simulations, verified reports, and commuter contributions."
                   icon={Clock}
                   trend={{ value: 12, isGood: true }}
                 />
                 <MetricCard
                   label="Heat Avoided"
-                  value={<CountUp end={activeImpact.heatMinutesAvoided} />}
+                  value={<CountUp end={activeHeatAvoided} />}
                   unit="m"
+                  description="Estimated outdoor heat-exposure minutes avoided through sheltered paths and route adjustments."
                   icon={TrendingUp}
                   trend={{ value: 8, isGood: true }}
                 />
                 <MetricCard
                   label="Stress Reduction"
                   value={activeStressScore}
+                  description="Current route stress index based on delay, walking load, heat pressure, and safety friction."
                   icon={Zap}
                   variant="stress"
                   stressLevel={activeStressScore}
@@ -128,6 +141,9 @@ export default function ImpactPage() {
                 <div className="glass p-5 sm:p-6 rounded-2xl sm:rounded-[3rem] border-2 border-zinc-100 space-y-4 animate-in fade-in slide-in-from-bottom duration-700 delay-250">
                   <div className="text-xs font-black uppercase tracking-widest text-zinc-400">
                     Latest Simulated Route
+                  </div>
+                  <div className="text-sm sm:text-base font-black text-zinc-900">
+                    {latestRouteName}
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
@@ -233,7 +249,7 @@ export default function ImpactPage() {
                   <div>
                     <p className="text-sm font-medium text-zinc-600 italic">
                       &ldquo;Your choice to use a sheltered path avoided{" "}
-                      <b>{activeImpact.heatMinutesAvoided} minutes</b> of direct
+                      <b>{activeHeatAvoided} minutes</b> of direct
                       UV exposure.&rdquo;
                     </p>
                   </div>
